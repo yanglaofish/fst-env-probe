@@ -24,7 +24,7 @@ function resolveSchemaPath(schema, fieldPath) {
 }
 
 test('插件元数据符合宿主约定', () => {
-  assert.equal(plugin.id, 'fishtools-env-probe');
+  assert.equal(plugin.id, 'fst-env-probe');
   assert.match(plugin.version, /^\d+\.\d+\.\d+$/);
   assert.equal(plugin.sdk, '^0.1.0');
   assert.ok(plugin.title && plugin.description);

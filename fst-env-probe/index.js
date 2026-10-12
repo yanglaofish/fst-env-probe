@@ -1,4 +1,4 @@
-// fishtools-env-probe —— 跨平台环境探测插件
+// fst-env-probe —— 跨平台环境探测插件
 // 仅使用 Node 内置模块与宿主动作上下文，不依赖任何内部 SDK 或第三方包。
 import path from 'node:path';
 import { createRequire } from 'node:module';

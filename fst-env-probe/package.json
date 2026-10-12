@@ -1,5 +1,5 @@
 {
-  "name": "fishtools-env-probe",
+  "name": "fst-env-probe",
   "version": "0.1.0",
   "type": "module",
   "main": "index.js",
@@ -38,12 +38,12 @@
   "author": "yanglaofish",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yanglaofish/fishtools-env-probe.git",
-    "directory": "fishtools-env-probe"
+    "url": "git+https://github.com/yanglaofish/fst-env-probe.git",
+    "directory": "fst-env-probe"
   },
   "bugs": {
-    "url": "https://github.com/yanglaofish/fishtools-env-probe/issues"
+    "url": "https://github.com/yanglaofish/fst-env-probe/issues"
   },
-  "homepage": "https://github.com/yanglaofish/fishtools-env-probe#readme",
+  "homepage": "https://github.com/yanglaofish/fst-env-probe#readme",
   "dependencies": {}
 }

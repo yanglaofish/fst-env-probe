@@ -1,6 +1,6 @@
 # 更新日志
 
-本文件记录 fishtools-env-probe 的重要变更。版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
+本文件记录 fst-env-probe 的重要变更。版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
 ## [0.1.0] - 2026-10-12
 

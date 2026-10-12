@@ -1,4 +1,4 @@
-# fishtools-env-probe
+# fst-env-probe
 
 Fishtools 的跨平台环境探测插件。只做一件事：**把当前机器上有什么、在哪里，查清楚并用稳定的字段名报出来**。
 
@@ -41,13 +41,13 @@ Fishtools 的插件是一部部「动作 + 输入/输出 schema」的独立零�
 
 ```sh
 # 开发时用引用模式：改源码后重启 fst 即生效，不必反复重装
-fst plugin link "D:\个人材料\Agent\Fishtools\plugins\fishtools-env-probe"
+fst plugin link "D:\个人材料\Agent\Fishtools\plugins\fst-env-probe"
 
 # 检查声明（不执行动作、不启动运行时服务）
-fst plugin validate "D:\个人材料\Agent\Fishtools\plugins\fishtools-env-probe"
+fst plugin validate "D:\个人材料\Agent\Fishtools\plugins\fst-env-probe"
 
 # 分发或稳定使用时用复制安装
-fst plugin add "D:\个人材料\Agent\Fishtools\plugins\fishtools-env-probe"
+fst plugin add "D:\个人材料\Agent\Fishtools\plugins\fst-env-probe"
 
 fst plugin list
 ```
@@ -64,7 +64,7 @@ fst command envprobe.verify  --input req.json    # 校验环境要求
 fst command envprobe.catalog                     # 列出可检测项
 ```
 
-TUI 里也可以：`/fishtools-env-probe` 进入插件二级菜单，或直接输入 `/envprobe.detect`、`/envprobe.which`。
+TUI 里也可以：`/fst-env-probe` 进入插件二级菜单，或直接输入 `/envprobe.detect`、`/envprobe.which`。
 
 ## 斜杠入口（TUI 里直接敲）
 
@@ -97,13 +97,13 @@ pyenv/uv/mise 的 python、rustup 的 toolchain、rbenv 的 ruby 等（见「扩
 
 | 动作 | 能力标识 | 用途 |
 | --- | --- | --- |
-| 检查任意环境项 | `fishtools-env-probe:check` | 按工具标识或任意命令名检查，或按分组列出；给出**每个安装及其版本**、真实路径与全部候选 |
-| 列出本机所有 Python | `fishtools-env-probe:pythons` | 全部 Python（PATH、`py` 启动器登记的版本、conda 环境）；`primary` 可直接绑定给其他插件 |
-| 探测当前环境 | `fishtools-env-probe:detect` | 采集全部分组，返回结构化报告；`paths` / `flags` 可直接绑定给其他插件 |
-| 解析工具路径 | `fishtools-env-probe:resolve` | 只解析指定的工具（含候选命令名与版本范围），返回 `paths`；必需项缺失时 `ok:false` 而不是抛错 |
-| 校验环境要求 | `fishtools-env-probe:verify` | 逐项校验存在性、版本范围与附加子命令，返回 `ok` 与逐项明细 |
-| 生成环境报告 | `fishtools-env-probe:report` | 一次探测后写出 Markdown + JSON 报告，同时返回 `paths` / `flags` |
-| 列出可检测项 | `fishtools-env-probe:catalog` | 列出分组与工具，确认某个工具在不在支持范围 |
+| 检查任意环境项 | `fst-env-probe:check` | 按工具标识或任意命令名检查，或按分组列出；给出**每个安装及其版本**、真实路径与全部候选 |
+| 列出本机所有 Python | `fst-env-probe:pythons` | 全部 Python（PATH、`py` 启动器登记的版本、conda 环境）；`primary` 可直接绑定给其他插件 |
+| 探测当前环境 | `fst-env-probe:detect` | 采集全部分组，返回结构化报告；`paths` / `flags` 可直接绑定给其他插件 |
+| 解析工具路径 | `fst-env-probe:resolve` | 只解析指定的工具（含候选命令名与版本范围），返回 `paths`；必需项缺失时 `ok:false` 而不是抛错 |
+| 校验环境要求 | `fst-env-probe:verify` | 逐项校验存在性、版本范围与附加子命令，返回 `ok` 与逐项明细 |
+| 生成环境报告 | `fst-env-probe:report` | 一次探测后写出 Markdown + JSON 报告，同时返回 `paths` / `flags` |
+| 列出可检测项 | `fst-env-probe:catalog` | 列出分组与工具，确认某个工具在不在支持范围 |
 
 判定预设（工作流条件里可直接选）：
 
@@ -158,7 +158,7 @@ pyenv/uv/mise 的 python、rustup 的 toolchain、rbenv 的 ruby 等（见「扩
 ```yaml
 # 1) 工作流绑定（零耦合）
 - id: probe
-  action: fishtools-env-probe:detect
+  action: fst-env-probe:detect
   with: { toolIds: [python, pip] }
 - id: run
   action: '@mytools/examples:pythonEcho'
@@ -170,7 +170,7 @@ pyenv/uv/mise 的 python、rustup 的 toolchain、rbenv 的 ruby 等（见「扩
 ```yaml
 # 2) 先校验、拿版本，再送出去
 - id: need
-  action: fishtools-env-probe:verify
+  action: fst-env-probe:verify
   with:
     requirements:
       - { id: python, version: '>=3.10' }
@@ -194,7 +194,7 @@ pyenv/uv/mise 的 python、rustup 的 toolchain、rbenv 的 ruby 等（见「扩
 
 ```json
 {
-  "fishtools-env-probe": {
+  "fst-env-probe": {
     "timeoutMs": 8000,
     "concurrency": 6,
     "cacheTtlSeconds": 300,
@@ -250,7 +250,7 @@ python、pip、node、java、go、rustc、cargo、ruby、dotnet、php 声明；�
 
 ```json
 {
-  "fishtools-env-probe": {
+  "fst-env-probe": {
     "extraProbes": [
       {
         "id": "node",
@@ -297,7 +297,7 @@ python、pip、node、java、go、rustc、cargo、ruby、dotnet、php 声明；�
 
 ```sh
 node --test                                   # 85 个单元测试（1 个按平台跳过）
-fst plugin validate "D:\...\plugins\fishtools-env-probe"   # 检查声明（不执行动作）
+fst plugin validate "D:\...\plugins\fst-env-probe"   # 检查声明（不执行动作）
 npm pack --dry-run                            # 确认打包内容
 ```
 

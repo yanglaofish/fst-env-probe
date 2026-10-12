@@ -1,4 +1,4 @@
-# fishtools-env-probe
+# fst-env-probe
 
 [Fishtools](https://www.npmjs.com/package/@yanglaofish/fishtools) 的跨平台环境探测插件。
 
@@ -7,8 +7,8 @@
 
 [![Node](https://img.shields.io/badge/node-%3E%3D24.15.0-brightgreen)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-92%20passing-brightgreen)](fishtools-env-probe/test)
-[![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)](fishtools-env-probe/package.json)
+[![Tests](https://img.shields.io/badge/tests-92%20passing-brightgreen)](fst-env-probe/test)
+[![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)](fst-env-probe/package.json)
 
 ## 能力概览
 
@@ -23,13 +23,13 @@
 ## 安装
 
 ```sh
-git clone https://github.com/yanglaofish/fishtools-env-probe.git
+git clone https://github.com/yanglaofish/fst-env-probe.git
 
 # 复制安装
-fst plugin add "./fishtools-env-probe"
+fst plugin add "./fst-env-probe"
 
 # 或在开发时引用源码（改动后重启 fst 生效）
-fst plugin link "./fishtools-env-probe"
+fst plugin link "./fst-env-probe"
 
 fst command envprobe.detect
 ```
@@ -39,13 +39,13 @@ TUI 里直接敲 `/envprobe.check`（查任意工具，含未内置的命令名�
 ## 文档
 
 检测项清单、输出结构、配置项、安全与信任边界、扩展检测能力的方式（含自定义探测器的
-`installPatterns`），都写在 [**fishtools-env-probe/README.md**](fishtools-env-probe/README.md)。
-变更记录见 [CHANGELOG.md](fishtools-env-probe/CHANGELOG.md)。
+`installPatterns`），都写在 [**fst-env-probe/README.md**](fst-env-probe/README.md)。
+变更记录见 [CHANGELOG.md](fst-env-probe/CHANGELOG.md)。
 
 ## 开发与测试
 
 ```sh
-cd fishtools-env-probe
+cd fst-env-probe
 npm test        # node --test，92 个用例（1 个按平台跳过）
 ```
 
