@@ -5,6 +5,7 @@
 只做一件事：**把当前机器上有什么、在哪里，查清楚并用稳定的字段名报出来**。
 不安装、不修改、不修复任何环境；零第三方依赖（只用 Node 内置模块）；不依赖其他插件，也不要求其他插件依赖它。
 
+[![test](https://github.com/yanglaofish/fst-env-probe/actions/workflows/test.yml/badge.svg)](https://github.com/yanglaofish/fst-env-probe/actions/workflows/test.yml)
 [![Node](https://img.shields.io/badge/node-%3E%3D24.15.0-brightgreen)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-92%20passing-brightgreen)](fst-env-probe/test)

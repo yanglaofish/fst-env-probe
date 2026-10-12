@@ -4,6 +4,7 @@ Fishtools 的跨平台环境探测插件。只做一件事：**把当前机器�
 
 不安装、不修改、不修复任何环境；不依赖任何第三方 npm 包（只用 Node 内置模块）；不依赖其他插件，也不要求其他插件依赖它。
 
+[![test](https://github.com/yanglaofish/fst-env-probe/actions/workflows/test.yml/badge.svg)](https://github.com/yanglaofish/fst-env-probe/actions/workflows/test.yml)
 [![Node](https://img.shields.io/badge/node-%3E%3D24.15.0-brightgreen)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-92%20passing-brightgreen)](test)
@@ -281,7 +282,7 @@ python、pip、node、java、go、rustc、cargo、ruby、dotnet、php 声明；�
 
 ## 平台与限制
 
-- 声明支持 `win32` / `linux` / `darwin`（x64、arm64）。**Windows 已实机验证**；Linux/macOS 的采集分支按各平台的标准命令实现（`ip -j`、`/etc/os-release`、`/proc/*`、`df -kP`、`sw_vers`、`ifconfig`、`netstat -rn`、`scutil --dns`），但尚未在这些平台实机跑过，首次使用请以 `warnings` 字段为准。
+- 声明支持 `win32` / `linux` / `darwin`（x64、arm64）。**三个平台都在 CI 上真实执行了全套单元测试**（[三平台矩阵](https://github.com/yanglaofish/fst-env-probe/actions/workflows/test.yml)），其中包含各平台的采集分支（`ip -j`、`/etc/os-release`、`/proc/*`、`df -kP`、`sw_vers`、`ifconfig`、`netstat -rn`、`scutil --dns`）与挂载识别。开发主要在 Windows 上进行：Linux/macOS 的采集结果若与预期不符，请以 `warnings` 与 `scan` 字段为准并提 issue。
 - Windows 上优先使用 `pwsh`（PowerShell 7），回退到 Windows PowerShell 5.1；命令通过 `-EncodedCommand` 传入并强制 UTF-8 输出，避免中文乱码。
 - Windows 上不把无扩展名的 shell 脚本当可执行文件（例如 `C:\Program Files\nodejs\npm`），而是优先选 `npm.cmd`，否则进程无法直接启动。
 - Windows 上若只有 Git for Windows 附带的 `bash.exe`（不在 PATH 中），会自动补链为 `paths.bash` / `flags.bash`，下游插件照样能拿到 `bash` 路径。
