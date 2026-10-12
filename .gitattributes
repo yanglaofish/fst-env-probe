@@ -1,0 +1,12 @@
+# 统一行尾，避免 Windows 检出把 LF 换成 CRLF 造成无意义的整文件差异
+* text=auto eol=lf
+
+# Windows 脚本保持 CRLF
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# 二进制
+*.png binary
+*.jpg binary
+*.tgz binary
