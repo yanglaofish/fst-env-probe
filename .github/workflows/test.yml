@@ -25,4 +25,20 @@ jobs:
 
       - name: 运行单元测试
         working-directory: fst-env-probe
-        run: node --test
+        shell: bash
+        run: |
+          set +e
+          node --test 2>&1 | tee test-output.txt
+          status=${PIPESTATUS[0]}
+          # 输出写进 job summary：公开仓库的 check-runs API 可匿名读取，
+          # 失败时无需登录网页即可拿到完整详情。
+          {
+            echo "## 单元测试结果（${{ matrix.os }}）"
+            echo ""
+            echo "退出码：$status"
+            echo ""
+            echo '```text'
+            tail -c 60000 test-output.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status

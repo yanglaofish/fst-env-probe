@@ -126,6 +126,8 @@ test('Windows 上按盘符与 UNC 前缀匹配远程路径', () => {
 });
 
 test('扫描上下文记录被跳过的远程挂载点，不做静默漏检', async () => {
+  // 断言只针对"被跳过的那一个挂载点"，不假设宿主 PATH 里有什么：
+  // 真实 Linux/macOS 机器的 /usr/bin 之类目录本来就可能有 node。
   const env = { PATH: '/nfs/tools/bin:/usr/bin' };
   const context = createScanContext({
     platform: 'linux',
@@ -133,10 +135,14 @@ test('扫描上下文记录被跳过的远程挂载点，不做静默漏检', as
     remoteMounts: [{ mount: '/nfs', fstype: 'nfs4' }],
   });
   const hits = await resolveExecutableAll('node', { platform: 'linux', env, context });
-  assert.deepEqual(hits, [], '远程挂载下的目录不应被读取');
-  assert.equal(context.skipped.length >= 1, true, '跳过必须被记录下来');
-  assert.equal(context.skipped[0].mount, '/nfs');
-  assert.equal(context.skipped[0].reason, 'remote-mount');
+  assert.equal(
+    hits.some((hit) => hit.path.startsWith('/nfs/')),
+    false,
+    '远程挂载下的目录不应被读取',
+  );
+  const skipped = context.skipped.filter((item) => item.reason === 'remote-mount');
+  assert.ok(skipped.length >= 1, '跳过必须被记录下来');
+  assert.equal(skipped[0].mount, '/nfs');
 });
 
 test('扫描上下文在 allowRemoteMounts 时不跳过远程目录', async () => {
