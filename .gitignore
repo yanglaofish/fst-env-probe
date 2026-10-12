@@ -1,0 +1,18 @@
+# 依赖：本仓库零第三方依赖，node_modules 只可能是本地调试残留
+node_modules/
+
+# Fishtools 运行时目录：运行日志、安装批次、插件状态
+.flow/
+
+# 运行产物
+*.tgz
+
+# 编辑器与系统文件
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 日志
+*.log
+npm-debug.log*

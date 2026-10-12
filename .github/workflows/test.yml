@@ -1,0 +1,28 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unit-test:
+    name: 单元测试（${{ matrix.os }}）
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # 三平台矩阵：插件里所有平台分支与挂载识别逻辑都在这里被真实执行一次
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: ['24.x']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: 运行单元测试
+        working-directory: fishtools-env-probe
+        run: node --test
