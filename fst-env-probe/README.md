@@ -282,7 +282,7 @@ python、pip、node、java、go、rustc、cargo、ruby、dotnet、php 声明；�
 
 ## 平台与限制
 
-- 声明支持 `win32` / `linux` / `darwin`（x64、arm64）。[CI 三平台矩阵](https://github.com/yanglaofish/fst-env-probe/actions/workflows/test.yml)覆盖各平台的采集分支（`ip -j`、`/etc/os-release`、`/proc/*`、`df -kP`、`sw_vers`、`ifconfig`、`netstat -rn`、`scutil --dns`）与挂载识别，并分别运行固定及最新版本的真实宿主集成测试。本轮升级已在 Windows x64 和 Linux x64 容器中验证；macOS、arm64 的本轮执行结果尚未验证。采集结果若与预期不符，请以 `warnings` 与 `scan` 字段为准并提 issue。
+- 声明支持 `win32` / `linux` / `darwin`（x64、arm64）。[CI 三平台矩阵](https://github.com/yanglaofish/fst-env-probe/actions/workflows/test.yml)覆盖各平台的采集分支（`ip -j`、`/etc/os-release`、`/proc/*`、`df -kP`、`sw_vers`、`ifconfig`、`netstat -rn`、`scutil --dns`）与挂载识别，并分别运行固定及最新版本的真实宿主集成测试。本轮 Windows x64、Linux x64、macOS arm64 的单元测试及 fst 0.5.0/0.5.1 集成测试均已通过；其他架构组合仍需相应机器验证。采集结果若与预期不符，请以 `warnings` 与 `scan` 字段为准并提 issue。
 - Windows 上优先使用 `pwsh`（PowerShell 7），回退到 Windows PowerShell 5.1；命令通过 `-EncodedCommand` 传入并强制 UTF-8 输出，避免中文乱码。
 - Windows 上不把无扩展名的 shell 脚本当可执行文件（例如 `C:\Program Files\nodejs\npm`），而是优先选 `npm.cmd`，否则进程无法直接启动。
 - Windows 上若只有 Git for Windows 附带的 `bash.exe`（不在 PATH 中），会自动补链为 `paths.bash` / `flags.bash`，下游插件照样能拿到 `bash` 路径。
