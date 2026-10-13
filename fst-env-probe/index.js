@@ -179,6 +179,7 @@ function summarizeCheck(result, label = '检查', limit = 30) {
 /** 分组快捷入口：TUI 里 /envprobe.<分组> 直接出结果，不用填参数。 */
 function presetQueryCommand(group, label) {
   return {
+    title: group === 'all' ? '全部检测项' : `${label}检查`,
     description: group === 'all' ? '列出全部检测项的检查结果' : `${label}的检查结果`,
     input: presetQueryInput,
     output: checkOutput,
@@ -203,17 +204,22 @@ const plugin = {
     '只做探测，不安装、不修改环境。',
   platforms: ['win32', 'linux', 'darwin'],
   architectures: ['x64', 'arm64'],
+  requirements: {
+    privilege: { linux: { level: 'user' }, win32: { level: 'user' } },
+  },
   config: configSchema,
   defaultConfig: { timeoutMs: 8000, concurrency: 6, cacheTtlSeconds: 300 },
 
   /**
    * 顺带把探测能力发布为 Cordis 共享服务 env.probe：
    * 其他插件可 getService('env.probe').pathOf('python') 直接取本机路径，无需工作流转参。
-   * 只用工作流绑定时用不到它；代价是常驻 TUI/Web 里改本插件配置或装卸插件时，
-   * 需要先进入维护模式（CLI 的 plugin add/link/remove/configure 已自动使用管理模式，不受影响）。
+   * 只用工作流绑定时用不到它；缓存可重建，宿主可在空闲时定向重启服务，
+   * 修改配置无需进入全局维护模式。
    */
   runtime: {
     provides: [SERVICE_NAME],
+    // 服务只持有可重建的检测缓存，空闲时可由新版宿主定向重启。
+    updatePolicy: 'automatic',
     apply(ctx, config) {
       const engine = createProbeEngine(config ?? {});
       // 宿主在 ready 阶段调用 apply，此处 set 即完成服务发布；dispose 时清掉探测缓存。
@@ -237,8 +243,8 @@ const plugin = {
     'envprobe.verify': { description: '校验环境要求是否满足', action: 'verify' },
     'envprobe.catalog': { description: '列出全部可检测项', action: 'catalog' },
     'envprobe.service': { description: '查看共享服务 env.probe 的状态与缓存', action: 'status' },
-    'envprobe.python': { description: '列出本机所有 Python（路径 / 版本 / 来源）', action: 'pythons' },
     'envprobe.which': {
+      title: '查询工具路径',
       description: '交互查询某个工具在本机的路径',
       input: emptyInput,
       output: {
@@ -359,7 +365,7 @@ const plugin = {
       input: reportInput,
       output: reportOutput,
       conditions: {
-        reportReady: { title: '报告已生成', path: 'ok', op: 'eq', value: true },
+        reportReady: { title: '报告采集成功', path: 'ok', op: 'eq', value: true },
         pythonAvailable: { title: '找到 Python', path: 'paths.python', op: 'exists' },
         gpuDetected: { title: '检测到加速设备', path: 'flags.gpu', op: 'eq', value: true },
       },
@@ -385,11 +391,13 @@ const plugin = {
           await writeFile(files.json, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
         }
         const result = {
-          ok: true,
+          ok: report.ok,
           generatedAt: report.generatedAt,
           files,
           summary: report.summary,
           warnings: report.warnings,
+          errors: report.errors,
+          scan: report.scan,
           paths: report.paths,
           flags: report.flags,
           durationMs: report.durationMs,

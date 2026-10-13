@@ -2,6 +2,7 @@
 import { resolveExecutableAll, isStoreShim, isWindows, expandInstallPatterns } from '../which.js';
 import { commandNamesFor, patternsFor } from '../catalog.js';
 import { tryRun, mapLimit, extractVersion, firstNonEmptyLine } from '../exec.js';
+import { pythonInEnv, registeredCondaPrefixes, registeredLauncherPythons } from '../python-paths.js';
 
 /**
  * 解析一个工具的全部命中：PATH / 已知目录 / 配置目录，再加上 PATH 之外的多版本安装
@@ -16,6 +17,9 @@ export async function resolveToolHits({
   extraDirs = [],
   context,
   withInstallations = true,
+  runProcess,
+  signal = context?.signal,
+  timeoutMs = 8000,
 } = {}) {
   const names = spec ? commandNamesFor(spec, platform) : [query].filter(Boolean);
   let hits = [];
@@ -32,7 +36,13 @@ export async function resolveToolHits({
     }
   }
   if (spec && withInstallations) {
-    const patterns = patternsFor(spec, platform);
+    const condaPaths = spec.id === 'python'
+      ? (await registeredCondaPrefixes({ env, context })).map((prefix) => pythonInEnv(prefix, platform))
+      : [];
+    const launcherPaths = spec.id === 'python'
+      ? (await registeredLauncherPythons({ runProcess, signal, platform, env, context, timeoutMs })).map((item) => item.path)
+      : [];
+    const patterns = [...condaPaths, ...launcherPaths, ...patternsFor(spec, platform)];
     if (patterns.length) {
       const installed = await expandInstallPatterns(patterns, { platform, env, context });
       const seen = new Set(hits.map((hit) => (isWindows(platform) ? hit.path.toLowerCase() : hit.path)));
@@ -91,6 +101,9 @@ export async function collectTools({
         env,
         extraDirs,
         context,
+        runProcess,
+        signal,
+        timeoutMs,
       });
       const real = hits.filter((hit) => !isStoreShim(hit.path));
       const primary = real[0] ?? hits[0] ?? null;

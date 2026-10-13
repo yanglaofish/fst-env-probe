@@ -7,7 +7,7 @@
 // 2) 所有目录访问都异步 + 超时（Promise.race）：即使某个目录挂住，也不会拖死整条流程。
 // 3) 目录列表带 TTL 与容量上限缓存，一次检测不会重复读同一个目录。
 import { constants } from 'node:fs';
-import { access, readdir, realpath, stat } from 'node:fs/promises';
+import { access, readFile, readdir, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 const WINDOWS_PREFERRED_EXTS = ['.exe', '.cmd', '.bat', '.com'];
@@ -192,30 +192,66 @@ export function clearDirectoryCache() {
   DIRECTORY_CACHE.clear();
 }
 
-async function isFile(file) {
+/** 所有文件探测入口统一检查远程挂载、取消与等待上限。 */
+export async function scanPath(file, operation, context, platform = process.platform) {
+  if (context?.signal?.aborted) throw Object.assign(new Error('操作已取消'), { code: 'CANCELLED' });
+  const mount = findRemoteMountFor(file, context?.remoteMounts ?? [], platform);
+  if (mount && !context?.allowRemoteMounts) {
+    context?.skipped.push({ dir: file, mount: mount.mount, fstype: mount.fstype, reason: 'remote-mount' });
+    throw Object.assign(new Error(`跳过远程路径：${file}`), { code: 'REMOTE_SKIPPED' });
+  }
+  let timer, onAbort;
   try {
-    return (await stat(file)).isFile();
-  } catch {
+    return await Promise.race([
+      Promise.resolve().then(operation),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          context?.timedOut.push(file);
+          reject(Object.assign(new Error(`路径读取超时：${file}`), { code: 'SCAN_TIMEOUT' }));
+        }, context?.directoryTimeoutMs ?? DEFAULT_DIRECTORY_TIMEOUT_MS);
+        if (context?.signal) {
+          onAbort = () => reject(Object.assign(new Error('操作已取消'), { code: 'CANCELLED' }));
+          context.signal.addEventListener('abort', onAbort, { once: true });
+        }
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+    if (onAbort) context.signal.removeEventListener('abort', onAbort);
+  }
+}
+
+export function readScanFile(file, { context, encoding = 'utf8' } = {}) {
+  return scanPath(file, () => readFile(file, encoding), context);
+}
+
+async function isFile(file, context, platform) {
+  try {
+    return (await scanPath(file, () => stat(file), context, platform)).isFile();
+  } catch (error) {
+    if (error.code === 'CANCELLED') throw error;
     return false;
   }
 }
 
-async function isExecutableFile(file, platform) {
-  if (!(await isFile(file))) return false;
+export async function isExecutableFile(file, platform = process.platform, context) {
+  if (!(await isFile(file, context, platform))) return false;
   if (isWindows(platform)) return true;
   try {
-    await access(file, constants.X_OK);
+    await scanPath(file, () => access(file, constants.X_OK), context, platform);
     return true;
-  } catch {
+  } catch (error) {
+    if (error.code === 'CANCELLED') throw error;
     return false;
   }
 }
 
 /** 解析符号链接（Python 启动器常常是软链）；失败时返回空串。 */
-export async function realPathOf(file) {
+export async function realPathOf(file, { context } = {}) {
   try {
-    return await realpath(file);
-  } catch {
+    return await scanPath(file, () => realpath(file), context);
+  } catch (error) {
+    if (error.code === 'CANCELLED') throw error;
     return '';
   }
 }
@@ -359,7 +395,7 @@ export async function expandInstallPatterns(patterns = [], options = {}) {
       if (!candidates.length) break;
     }
     for (const candidate of candidates) {
-      if (!(await isExecutableFile(candidate, platform))) continue;
+      if (!(await isExecutableFile(candidate, platform, context))) continue;
       const key = isWindows(platform) ? candidate.toLowerCase() : candidate;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -398,7 +434,7 @@ export async function resolveExecutableAll(name, options = {}) {
   };
 
   if (path.isAbsolute(query) || /[\\/]/.test(query)) {
-    if (await isExecutableFile(path.resolve(cwd, query), platform)) {
+    if (await isExecutableFile(path.resolve(cwd, query), platform, context)) {
       push(path.resolve(cwd, query), 'explicit');
     }
     return results;
@@ -414,7 +450,8 @@ export async function resolveExecutableAll(name, options = {}) {
     { dirs: [...extraDirs, ...(options.shimDirs ?? [])], source: 'configured' },
     { dirs: fromKnown, source: 'known' },
   ];
-  const exts = executableExts(platform, env);
+  const extensions = executableExts(platform, env);
+  const exts = isWindows(platform) && extensions.includes(path.extname(query).toLowerCase()) ? [''] : extensions;
 
   for (const group of groups) {
     for (const dir of group.dirs) {
@@ -442,7 +479,7 @@ export async function resolveExecutableAll(name, options = {}) {
         const fileName = `${query}${ext}`;
         if (!entries.has(isWindows(platform) ? fileName.toLowerCase() : fileName)) continue;
         const file = path.join(dir, fileName);
-        if (!(await isExecutableFile(file, platform))) continue;
+        if (!(await isExecutableFile(file, platform, context))) continue;
         push(file, group.source);
       }
     }

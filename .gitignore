@@ -6,6 +6,7 @@ node_modules/
 
 # 运行产物
 *.tgz
+.artifacts/
 
 # 编辑器与系统文件
 .vscode/

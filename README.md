@@ -8,7 +8,7 @@
 [![test](https://github.com/yanglaofish/fst-env-probe/actions/workflows/test.yml/badge.svg)](https://github.com/yanglaofish/fst-env-probe/actions/workflows/test.yml)
 [![Node](https://img.shields.io/badge/node-%3E%3D24.15.0-brightgreen)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-92%20passing-brightgreen)](fst-env-probe/test)
+[![Tests](https://img.shields.io/badge/tests-unit%20%2B%20integration-brightgreen)](fst-env-probe/test)
 [![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)](fst-env-probe/package.json)
 
 ## 能力概览
@@ -24,7 +24,11 @@
 ## 安装
 
 ```sh
+# Node >= 24.15.0；从官方源安装或更新宿主
+npm install -g @yanglaofish/fishtools@latest --registry=https://registry.npmjs.org
 git clone https://github.com/yanglaofish/fst-env-probe.git
+cd fst-env-probe
+fst plugin validate "./fst-env-probe"
 
 # 复制安装
 fst plugin add "./fst-env-probe"
@@ -47,11 +51,13 @@ TUI 里直接敲 `/envprobe.check`（查任意工具，含未内置的命令名�
 
 ```sh
 cd fst-env-probe
-npm test        # node --test，92 个用例（1 个按平台跳过）
+npm test                   # 单元与回归测试，按平台跳过不适用项
+npm run test:integration   # 使用已安装的真实 fst 验证动作、工作流、服务和独立归档安装
 ```
 
-CI 在 **Ubuntu / Windows / macOS** 三个平台各跑一遍（[.github/workflows/test.yml](.github/workflows/test.yml)）——
-插件默认对远程挂载点、异步扫描与各平台采集分支的处理，都靠它来守。
+CI 配置了 **Ubuntu / Windows / macOS** 三平台矩阵，分别验证 `fst 0.5.0` 与官方 npm `latest`
+（[.github/workflows/test.yml](.github/workflows/test.yml)）。本轮本地验证范围与遗留限制见
+[升级评审报告](docs/升级评审报告-2026-10-13.md)。
 
 ## 设计取向
 
