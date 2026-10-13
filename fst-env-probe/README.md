@@ -64,6 +64,15 @@ fst command envprobe.catalog                     # 列出可检测项
 
 TUI 里也可以：`/fst-env-probe` 进入插件二级菜单，或直接输入 `/envprobe.detect`、`/envprobe.which`。
 
+### fst 0.5.2 的中文快捷名称
+
+在 TUI 输入 `/shortcuts` → 添加快捷名称，例如把“环境检测”指向 `envprobe.detect`，或把“检查工具”指向 `envprobe.check`。
+后者可设置默认参数 `{"tool":["node","npm"],"candidates":false}`，之后输入 `/检查工具` 即可执行。
+也可选择稳定动作 ID，例如 `fst-env-probe:check`；命令快捷项由宿主同时保存目标命令和插件身份。
+快捷名称保存在当前工作区，重启后继续有效；原有动作 ID、`envprobe.*` 命令和输出字段继续使用。
+
+本插件 `0.1.1` 可直接运行于 fst `0.5.2`。本轮调整了集成测试、CI 宿主基线及说明，生产代码无需迁移。
+
 ## 斜杠入口（TUI 里直接敲）
 
 20 个入口，覆盖全部检测项：
@@ -300,7 +309,7 @@ python、pip、node、java、go、rustc、cargo、ruby、dotnet、php 声明；�
 ```sh
 cd fst-env-probe                              # 从仓库根目录进入插件包
 npm test                                     # 单元及回归测试
-npm run test:integration                     # 需已安装 fst 0.5.0 或最新版本
+npm run test:integration                     # 需已安装 fst 0.5.2 或更新版本
 fst plugin validate .                        # 检查声明（不执行动作）
 fst plugin lint .                            # 质量检查
 npm pack --dry-run                            # 确认打包内容
