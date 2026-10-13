@@ -7,10 +7,10 @@ Fishtools 的跨平台环境探测插件。只做一件事：**把当前机器�
 [![test](https://github.com/yanglaofish/fst-env-probe/actions/workflows/test.yml/badge.svg)](https://github.com/yanglaofish/fst-env-probe/actions/workflows/test.yml)
 [![Node](https://img.shields.io/badge/node-%3E%3D24.15.0-brightgreen)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-92%20passing-brightgreen)](test)
+[![Tests](https://img.shields.io/badge/tests-unit%20%2B%20integration-brightgreen)](test)
 [![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)](package.json)
 
-一个包提供全部能力：十个分组的检测项、19 个斜杠入口、工作流动作，以及可选的 Cordis 共享服务 `env.probe`。
+一个包提供全部能力：十个分组的检测项、20 个斜杠入口、工作流动作，以及可选的 Cordis 共享服务 `env.probe`。
 
 ---
 
@@ -26,29 +26,26 @@ Fishtools 的插件是一部部「动作 + 输入/输出 schema」的独立零�
 | **斜杠直达** | TUI 里 `/envprobe.check`、`/envprobe.python`、`/envprobe.network` … 直接查任意工具或分组 | 无 |
 | **独立命令** | `fst command envprobe.detect`、`fst command envprobe.check` | 无 |
 
-本包声明了 `runtime`（`provides: ['env.probe']`）。宿主据此认为项目里存在"运行时插件"，但实际影响范围很窄：
-
-- **不受影响**：工作流运行、命令、动作、服务调用，以及 CLI 的 `fst plugin add` / `link` / `remove` / `configure`
-  （这四个命令内部都带了管理/维护模式，逐行可查：`core/bin/fst.js` 的 38/39/40/71 行）。
-- **受影响**：在常驻 TUI/Web 会话里**保存本插件配置**或**装卸插件**时，需要先在插件菜单里
-  点一下「进入维护模式（停止有状态服务）」。
-
-如果你完全不想要这个约束，把插件定义里的 `runtime` 那一段删掉即可——探测动作与工作流绑定完全不依赖它，
-代价只是其他插件不能再通过 `getService('env.probe')` 取路径。
-
-> 关于维护模式：0.4.0 起 `fst plugin add/link/remove/configure` 已自动使用管理模式；只有常驻 TUI/Web 的插件管理与配置修改仍需手动进入维护模式，且只在装了声明 `runtime` 的插件时才有这个要求。
+本包声明 `runtime.provides: ['env.probe']`，并在 `0.1.1` 中声明 `updatePolicy: 'automatic'`。
+服务只持有可重建的缓存；`fst 0.5.0` 可以在业务空闲时定向重启本插件及依赖它的插件，配置修改无需进入全局维护模式。
+受影响的其他插件若要求维护确认，仍遵循它们自己的声明。工作流运行期间宿主会拒绝插件变更。
+插件明确声明普通用户权限，不要求 Linux root 或 Windows 管理员；受限设备、网络或容器资源的查询结果仍取决于实际访问权限。
 
 ## 安装
 
 ```sh
-# 开发时用引用模式：改源码后重启 fst 即生效，不必反复重装
-fst plugin link "D:\个人材料\Agent\Fishtools\plugins\fst-env-probe"
+# 从仓库根目录操作：真正的插件包在内层 fst-env-probe 目录
+npm install -g @yanglaofish/fishtools@latest --registry=https://registry.npmjs.org
+
+# 开发引用；fst 0.5.0 可用 --watch 在空闲后重启
+fst plugin link "./fst-env-probe"
 
 # 检查声明（不执行动作、不启动运行时服务）
-fst plugin validate "D:\个人材料\Agent\Fishtools\plugins\fst-env-probe"
+fst plugin validate "./fst-env-probe"
+fst plugin lint "./fst-env-probe"
 
 # 分发或稳定使用时用复制安装
-fst plugin add "D:\个人材料\Agent\Fishtools\plugins\fst-env-probe"
+fst plugin add "./fst-env-probe"
 
 fst plugin list
 ```
@@ -69,7 +66,7 @@ TUI 里也可以：`/fst-env-probe` 进入插件二级菜单，或直接输入 `
 
 ## 斜杠入口（TUI 里直接敲）
 
-19 个入口，覆盖全部检测项：
+20 个入口，覆盖全部检测项：
 
 | 入口 | 作用 | CLI 也能用 |
 | --- | --- | --- |
@@ -78,6 +75,7 @@ TUI 里也可以：`/fst-env-probe` 进入插件二级菜单，或直接输入 `
 | `/envprobe.system`、`/envprobe.shell`、`/envprobe.language`、`/envprobe.tool`、`/envprobe.container`、`/envprobe.package`、`/envprobe.network`、`/envprobe.gpu`、`/envprobe.env`、`/envprobe.custom` | 每个检测分组一个快捷入口，进去不用填参数 | 仅 TUI |
 | `/envprobe.python` | 全部 Python：PATH、`py` 启动器登记的版本、conda 环境；带路径、真实路径、版本、来源与默认标记 | 是 |
 | `/envprobe.which` | 交互输入一个名字 → 路径 | 仅 TUI |
+| `/envprobe.service` | 查看共享服务与缓存状态 | 是 |
 | `/envprobe.detect`、`/envprobe.report`、`/envprobe.resolve`、`/envprobe.verify`、`/envprobe.catalog` | 完整探测 / 报告 / 按需解析 / 校验 / 能力清单 | 是 |
 
 `check` 列出的是**每个安装及其版本**，不只是 PATH 上的第一个：
@@ -111,7 +109,7 @@ pyenv/uv/mise 的 python、rustup 的 toolchain、rbenv 的 ruby 等（见「扩
 - `detect`：`找到 Python`、`找到 Node.js`、`找到 conda`、`找到 Git`、`找到 docker`、`找到 kubectl`、`存在 kubeconfig`、`检测到加速设备`、`检测到昇腾 NPU`、`容器守护进程可用`
 - `resolve`：`全部解析成功`
 - `verify`：`环境要求全部满足`
-- `report`：`报告已生成`、`找到 Python`、`检测到加速设备`
+- `report`：`报告采集成功`、`找到 Python`、`检测到加速设备`
 
 ## 检测范围
 
@@ -188,6 +186,8 @@ pyenv/uv/mise 的 python、rustup 的 toolchain、rbenv 的 ruby 等（见「扩
 ```
 
 `resolve` 的 `paths` 与 `verify` 的 `paths` 同理，键就是你请求的工具标识，可以直接绑定。
+它们与 `detect/check` 共用安装目录解析，包括 Conda 注册表中的 Python；显式传入 `names` 时仅按指定命令查找。
+`report.ok` 表示采集是否成功；采集失败时仍生成报告文件，并保留 `errors`，供工作流判断。
 
 ## 配置
 
@@ -282,14 +282,15 @@ python、pip、node、java、go、rustc、cargo、ruby、dotnet、php 声明；�
 
 ## 平台与限制
 
-- 声明支持 `win32` / `linux` / `darwin`（x64、arm64）。**三个平台都在 CI 上真实执行了全套单元测试**（[三平台矩阵](https://github.com/yanglaofish/fst-env-probe/actions/workflows/test.yml)），其中包含各平台的采集分支（`ip -j`、`/etc/os-release`、`/proc/*`、`df -kP`、`sw_vers`、`ifconfig`、`netstat -rn`、`scutil --dns`）与挂载识别。开发主要在 Windows 上进行：Linux/macOS 的采集结果若与预期不符，请以 `warnings` 与 `scan` 字段为准并提 issue。
+- 声明支持 `win32` / `linux` / `darwin`（x64、arm64）。[CI 三平台矩阵](https://github.com/yanglaofish/fst-env-probe/actions/workflows/test.yml)覆盖各平台的采集分支（`ip -j`、`/etc/os-release`、`/proc/*`、`df -kP`、`sw_vers`、`ifconfig`、`netstat -rn`、`scutil --dns`）与挂载识别，并分别运行固定及最新版本的真实宿主集成测试。本轮升级已在 Windows x64 和 Linux x64 容器中验证；macOS、arm64 的本轮执行结果尚未验证。采集结果若与预期不符，请以 `warnings` 与 `scan` 字段为准并提 issue。
 - Windows 上优先使用 `pwsh`（PowerShell 7），回退到 Windows PowerShell 5.1；命令通过 `-EncodedCommand` 传入并强制 UTF-8 输出，避免中文乱码。
 - Windows 上不把无扩展名的 shell 脚本当可执行文件（例如 `C:\Program Files\nodejs\npm`），而是优先选 `npm.cmd`，否则进程无法直接启动。
 - Windows 上若只有 Git for Windows 附带的 `bash.exe`（不在 PATH 中），会自动补链为 `paths.bash` / `flags.bash`，下游插件照样能拿到 `bash` 路径。
 - 微软商店的 `python.exe` 别名（`WindowsApps` 目录）会被识别并降低优先级，同时在 `tools.<id>.shim` 里标出。
 - `npu-smi info` 的文本格式随驱动版本变化，本插件做尽力解析：`details.ascend.claimCount` 是工具自己报告的数量，`detectedCount` 是解析出的数量，两者不一致时会给出告警。
 - WSL：`wsl -l -v` 与 `wsl --version` 是只读查询；`wsl -e uname -r` 会**真正启动发行版**（占资源、可能触发初始化），因此只在 `deep: true` 时执行。WSL 的输出编码随版本而异（默认 UTF-16LE），探测时两种解码都会试一次并取可读的那个。
-- 目录扫描全部是**异步 + 每目录超时**（默认 3 秒），不使用同步文件系统调用，不会卡住宿主事件循环。
+- 可执行文件扫描使用异步调用及等待上限（默认 3 秒），完整路径和安装目录也遵循远程挂载跳过规则。
+  超时停止等待，不会强行取消内核里的文件系统调用；网络挂载识别失败、符号链接跨到远程位置或主动启用远程扫描时，不能保证底层 I/O 立即退出。
 - **默认跳过远程挂载点**：Linux 读 `/proc/self/mounts` 识别 nfs/nfs4/cifs/smb3/sshfs/fuse 网络类/autofs/9p/ceph 等，macOS 解析 `mount` 输出，Windows 识别 UNC 与网络驱动器。这类路径上的文件系统调用可能**永不返回**（Linux NFS hard mount 是内核级不可中断睡眠，连 `kill -9` 都无效），所以默认不去碰；跳过了哪些、哪些目录超时，一律写进 `warnings` 与 `scan`，`flags.incompleteScan` 同时置位——不会静默少给结果。工具确实装在远程挂载上时，用 `allowRemoteMounts: true` 让它在超时内尝试。
 - 探测过程只读：不会安装、升级、修复任何环境，也不会改动系统配置。
 - 宿主声明要求 Node ≥ 24.15.0；在更低版本上 `npm` 安装时会打印 `EBADENGINE` 警告，插件本身只用到 Node 内置模块。
@@ -297,8 +298,11 @@ python、pip、node、java、go、rustc、cargo、ruby、dotnet、php 声明；�
 ## 开发
 
 ```sh
-node --test                                   # 85 个单元测试（1 个按平台跳过）
-fst plugin validate "D:\...\plugins\fst-env-probe"   # 检查声明（不执行动作）
+cd fst-env-probe                              # 从仓库根目录进入插件包
+npm test                                     # 单元及回归测试
+npm run test:integration                     # 需已安装 fst 0.5.0 或最新版本
+fst plugin validate .                        # 检查声明（不执行动作）
+fst plugin lint .                            # 质量检查
 npm pack --dry-run                            # 确认打包内容
 ```
 
@@ -307,6 +311,7 @@ npm pack --dry-run                            # 确认打包内容
 ```
 index.js              插件定义：动作、命令、配置 schema
 lib/catalog.js        探测器注册表（加一行即新增一个检测项）
+lib/python-paths.js   共享的 Conda 注册表及 Windows py 启动器发现
 lib/which.js          跨平台可执行文件解析（PATH/PATHEXT/已知目录/商店别名/多版本安装目录/超时与跳过）
 lib/mounts.js         远程与网络挂载点识别（Linux /proc/self/mounts、macOS mount、Windows 网络驱动器）
 lib/exec.js           受管进程封装、PowerShell JSON 桥、有界并发
@@ -320,7 +325,8 @@ lib/groups/platform.js 容器/K8s、conda 与 Python 清单、加速设备
 lib/detect.js         编排、缓存、按需解析、快照
 lib/schema.js         输入输出 JSON Schema（paths/flags 键由注册表派生）
 lib/render.js         Markdown 报告
-test/                 9 个测试文件，覆盖解析、版本、脱敏、挂载识别、Python 解析、采集与动作端到端
+test/                 单元及故障回归，覆盖解析、版本、脱敏、挂载识别、Python、缓存与取消
+integration/fst.js    真实宿主动作用例、快照、工作流绑定、配置重启与归档安装
 ```
 
 ## 许可证

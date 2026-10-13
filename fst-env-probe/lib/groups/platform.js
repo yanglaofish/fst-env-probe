@@ -4,7 +4,9 @@ import path from 'node:path';
 import { constants } from 'node:fs';
 import { access, readFile } from 'node:fs/promises';
 import { tryRun, parseJsonLoose, toArray, extractVersion, firstLine } from '../exec.js';
-import { isWindows, resolveExecutableAll, splitEnvList, realPathOf, findRemoteMountFor, expandInstallPatterns } from '../which.js';
+import { isWindows, resolveExecutableAll, splitEnvList, realPathOf, findRemoteMountFor, expandInstallPatterns, isExecutableFile } from '../which.js';
+import { pythonInEnv, registeredCondaPrefixes, parsePyLauncher } from '../python-paths.js';
+export { parsePyLauncher } from '../python-paths.js';
 import { patternsFor } from '../catalog.js';
 import { compareVersions } from '../version.js';
 
@@ -164,11 +166,7 @@ export async function collectContainers({ runProcess, signal, env = process.env,
 // 语言清单：conda 环境与 Python 解释器
 // ---------------------------------------------------------------------------
 
-function pythonInEnv(envDir) {
-  return isWindows() ? path.join(envDir, 'python.exe') : path.join(envDir, 'bin', 'python');
-}
-
-async function listCondaEnvs({ runProcess, signal, env, condaPath, timeoutMs }) {
+async function listCondaEnvs({ runProcess, signal, env, condaPath, timeoutMs, context }) {
   if (condaPath) {
     const json = await tryRun(runProcess, condaPath, ['env', 'list', '--json'], {
       signal,
@@ -179,31 +177,9 @@ async function listCondaEnvs({ runProcess, signal, env, condaPath, timeoutMs }) 
       if (data && Array.isArray(data.envs)) return { envs: data.envs, source: 'conda env list --json' };
     }
   }
-  const registry = path.join(os.homedir(), '.conda', 'environments.txt');
-  try {
-    const text = await readFile(registry, 'utf8');
-    const envs = text
-      .replace(/\r/g, '')
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line && !line.startsWith('#'));
-    if (envs.length) return { envs, source: '~/.conda/environments.txt' };
-  } catch {
-    /* 没有该文件 */
-  }
+  const envs = await registeredCondaPrefixes({ env, context });
+  if (envs.length) return { envs, source: 'CONDA_PREFIX / ~/.conda/environments.txt' };
   return { envs: [], source: '' };
-}
-
-export function parsePyLauncher(text) {
-  const found = [];
-  for (const rawLine of String(text ?? '').replace(/\r/g, '').split('\n')) {
-    // py -0p 的实际输出形如：` -V:3.12 *        C:\...\python.exe`
-    // 星号前有空格，必须一起容错，否则 '*' 会被吃进路径。
-    const match = /^\s*-V:(\d+\.\d+)(\s*\*)?\s+(.+?\.exe)\s*$/i.exec(rawLine);
-    if (!match) continue;
-    found.push({ path: match[3].trim(), version: match[1], default: Boolean(match[2]) });
-  }
-  return found;
 }
 
 async function pythonVersion(runProcess, executable, { signal, timeoutMs }) {
@@ -260,11 +236,11 @@ export async function collectPythons({
       return;
     }
     if (isSkippedPath(candidate.path, context)) return;
-    const available = await fileExists(candidate.path);
+    const available = await isExecutableFile(candidate.path, process.platform, context);
     const entry = {
       path: candidate.path,
       // Python 启动器常常是符号链接，解析出来才能看出到底指向哪个版本。
-      realPath: await realPathOf(candidate.path),
+      realPath: await realPathOf(candidate.path, { context }),
       version: candidate.version ?? null,
       source: candidate.source ?? '',
       kind: candidate.kind ?? 'interpreter',
@@ -289,12 +265,12 @@ export async function collectPythons({
     const condaTool = toolById.conda;
     conda.path = condaTool?.found ? condaTool.path : '';
     conda.version = condaTool?.version ?? null;
-    const listed = await listCondaEnvs({ runProcess, signal, env, condaPath: conda.path, timeoutMs });
+    const listed = await listCondaEnvs({ runProcess, signal, env, condaPath: conda.path, timeoutMs, context });
     conda.source = listed.source;
     for (const dir of listed.envs) {
       const interpreter = pythonInEnv(dir);
       const active = dir === conda.prefix;
-      const exists = await fileExists(interpreter);
+      const exists = await isExecutableFile(interpreter, process.platform, context);
       conda.envs.push({ path: dir, python: exists ? interpreter : '', active });
       if (exists) await add({ path: interpreter, source: active ? 'conda(active)' : 'conda', kind: 'conda-env', default: active, label: path.basename(dir) });
     }

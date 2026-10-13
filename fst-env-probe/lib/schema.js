@@ -482,7 +482,7 @@ export const reportOutput = {
   additionalProperties: true,
   required: ['ok', 'generatedAt', 'files', 'summary', 'warnings', 'paths', 'flags'],
   properties: {
-    ok: { type: 'boolean', title: '生成成功' },
+    ok: { type: 'boolean', title: '采集成功', description: '报告文件仍会生成；采集失败时为 false，详见 errors' },
     generatedAt: { type: 'string', title: '生成时间' },
     files: {
       type: 'object',
@@ -496,7 +496,9 @@ export const reportOutput = {
     markdown: { type: 'string', title: 'Markdown 正文' },
     summary: summarySchema,
     warnings: warningsSchema,
+    errors: errorsSchema,
     paths: pathsSchema,
+    scan: detectOutput.properties.scan,
     flags: flagsSchema,
     snapshotPath: { type: 'string', title: '快照文件' },
     durationMs: { type: 'number', title: '耗时（毫秒）' },
@@ -544,6 +546,8 @@ export const checkInput = {
       description: '留空则使用插件配置的 concurrency',
     },
     refresh: { type: 'boolean', title: '忽略目录缓存', default: false },
+    extraPaths: { type: 'array', title: '额外搜索目录', items: { type: 'string' } },
+    allowRemoteMounts: { type: 'boolean', title: '允许扫描远程挂载点', description: '留空则使用插件配置，默认跳过远程目录' },
   },
 };
 
@@ -621,9 +625,12 @@ export const pythonsInput = {
       type: 'boolean',
       title: '获取每个解释器的版本',
       default: true,
-      description: '关闭可更快返回，但只有主解释器会带版本',
+      description: '关闭时不运行 Python 版本命令，可更快返回路径清单',
     },
     includeConda: { type: 'boolean', title: '包含 conda 环境', default: true },
+    refresh: { type: 'boolean', title: '忽略目录缓存', default: false },
+    extraPaths: { type: 'array', title: '额外搜索目录', items: { type: 'string' } },
+    allowRemoteMounts: { type: 'boolean', title: '允许扫描远程挂载点', description: '留空则使用插件配置，默认跳过远程目录' },
     timeoutMs: {
       type: 'integer',
       title: '单项超时（毫秒）',

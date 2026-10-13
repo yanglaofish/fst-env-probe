@@ -1,5 +1,6 @@
 // 检测编排：分组并行采集、汇总为稳定结构，并提供给动作、命令与共享服务复用。
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { GROUPS, GROUP_IDS, withCustomProbes, commandNamesFor, groupMeta } from './catalog.js';
 import { collectSystem, collectEnv } from './groups/system.js';
@@ -14,6 +15,10 @@ import { EnvProbeError } from './errors.js';
 import { createFallbackRunProcess } from './run-process.js';
 
 export const SCHEMA_VERSION = 1;
+
+function checkCancelled(signal) {
+  if (signal?.aborted) throw new EnvProbeError('操作已取消', { code: 'CANCELLED' });
+}
 
 function clamp(value, min, max) {
   const number = Number(value);
@@ -30,13 +35,13 @@ function expandPath(target, env = process.env) {
   return path.resolve(expanded);
 }
 
-function collectExtraDirs(config, input) {
+function collectExtraDirs(config, input, env) {
   return [
     ...(Array.isArray(config.extraPaths) ? config.extraPaths : []),
     ...(Array.isArray(input.extraPaths) ? input.extraPaths : []),
   ]
     .filter((item) => typeof item === 'string' && item.trim())
-    .map((item) => path.resolve(expandPathValue(item)));
+    .map((item) => path.resolve(expandPathValue(item, env)));
 }
 
 export function resolveGroups(input = {}, config = {}) {
@@ -100,6 +105,7 @@ function withCollectorDependencies(selected, allTools, collectors) {
  * 因此默认跳过它们，并把"跳过了哪里"一路记录下来，绝不让它变成静默漏检。
  */
 async function buildScanContext({ runProcess, signal, env, config = {}, input = {} }) {
+  checkCancelled(signal);
   const allowRemoteMounts = input.allowRemoteMounts ?? config.allowRemoteMounts ?? false;
   const mountInfo = await detectRemoteMounts({
     runProcess,
@@ -146,6 +152,7 @@ export async function runDetection({
   input = {},
   log = async () => {},
 } = {}) {
+  checkCancelled(signal);
   const started = Date.now();
   const { tools, toolById, rejected = [] } = withCustomProbes(config.extraProbes ?? []);
   const groups = resolveGroups(input, config);
@@ -156,7 +163,7 @@ export async function runDetection({
   const timeoutMs = clamp(input.timeoutMs ?? config.timeoutMs ?? 8000, 1000, 60000);
   const concurrency = clamp(input.concurrency ?? config.concurrency ?? 6, 1, 16);
   const deep = !!input.deep;
-  const extraDirs = collectExtraDirs(config, input);
+  const extraDirs = collectExtraDirs(config, input, env);
   const selectedTools = withCollectorDependencies(pickTools(tools, input, groups), tools, collectors);
   if (input.refresh) clearDirectoryCache();
 
@@ -322,6 +329,7 @@ export async function runDetection({
     durationMs: Date.now() - started,
   };
   await log('环境检测结束', { durationMs: report.durationMs, found: report.summary.toolsFound });
+  checkCancelled(signal);
   return report;
 }
 
@@ -330,6 +338,8 @@ export async function runDetection({
 // ---------------------------------------------------------------------------
 
 export async function listPythons({ runProcess, signal, env = process.env, config = {}, input = {}, log = async () => {} } = {}) {
+  checkCancelled(signal);
+  if (input.refresh) clearDirectoryCache();
   const { toolById } = withCustomProbes(config.extraProbes ?? []);
   const { context, mountInfo } = await buildScanContext({ runProcess, signal, env, config, input });
   const timeoutMs = clamp(input.timeoutMs ?? config.timeoutMs ?? 8000, 1000, 60000);
@@ -340,13 +350,13 @@ export async function listPythons({ runProcess, signal, env = process.env, confi
   for (const id of ['python', 'conda']) {
     const spec = toolById.get(id);
     if (!spec) continue;
-    const hits = await resolveToolHits({ spec, platform: process.platform, env, context });
+    const hits = await resolveToolHits({ spec, platform: process.platform, env, context, extraDirs: collectExtraDirs(config, input, env), runProcess, signal, timeoutMs });
     const primary = hits.find((hit) => !isStoreShim(hit.path)) ?? hits[0] ?? null;
     const probed =
-      primary && spec.versionArgs.length
+      primary && spec.versionArgs.length && input.includeVersions !== false
         ? await probeVersion(spec, primary.path, { runProcess, signal, timeoutMs })
         : { version: null };
-    detected[id] = { found: !!primary, path: primary?.path ?? '', version: probed.version ?? null, title: spec.title };
+    detected[id] = { ...spec, found: !!primary, path: primary?.path ?? '', version: probed.version ?? null };
   }
 
   // 用专题枚举而不是通用检查：它会带上 conda 环境与 py 启动器登记的全部版本。
@@ -372,12 +382,11 @@ export async function listPythons({ runProcess, signal, env = process.env, confi
     interpreters.find((entry) => entry.source === 'primary' && entry.available) ??
     interpreters.find((entry) => entry.source === 'PATH' && entry.available) ??
     interpreters.find((entry) => entry.available) ??
-    interpreters[0] ??
     null;
 
   await log('Python 枚举完成', { count: pythons.length, primary: primary?.path ?? '' });
   return {
-    ok: interpreters.length > 0,
+    ok: primary !== null,
     count: pythons.length,
     pythons,
     launchers,
@@ -409,13 +418,15 @@ export async function checkTools({
   input = {},
   log = async () => {},
 } = {}) {
+  checkCancelled(signal);
+  if (input.refresh) clearDirectoryCache();
   const { tools, toolById } = withCustomProbes(config.extraProbes ?? []);
   const { context, mountInfo } = await buildScanContext({ runProcess, signal, env, config, input });
   const timeoutMs = clamp(input.timeoutMs ?? config.timeoutMs ?? 8000, 1000, 60000);
   const concurrency = clamp(input.concurrency ?? config.concurrency ?? 6, 1, 16);
   const includeVersion = input.includeVersion !== false;
   const wantCandidates = input.candidates !== false;
-  const extraDirs = collectExtraDirs(config, input);
+  const extraDirs = collectExtraDirs(config, input, env);
 
   const queries = (Array.isArray(input.tool) ? input.tool : [input.tool])
     .map((value) => (typeof value === 'string' ? value.trim() : ''))
@@ -472,6 +483,9 @@ export async function checkTools({
         env,
         extraDirs,
         context,
+        runProcess,
+        signal,
+        timeoutMs,
       });
       // 商店别名排到最后：它们存在但通常不可用。
       const ordered = orderHits(hits);
@@ -492,7 +506,7 @@ export async function checkTools({
       const primaryProbe = await probeOne(primary.path);
       entry.found = true;
       entry.path = primary.path;
-      entry.realPath = await realPathOf(primary.path);
+      entry.realPath = await realPathOf(primary.path, { context });
       entry.source = primary.source;
       entry.shim = isStoreShim(primary.path);
       entry.version = primaryProbe.version;
@@ -508,7 +522,7 @@ export async function checkTools({
           const probed = index === 0 ? primaryProbe : await probeOne(hit.path);
           return {
             path: hit.path,
-            realPath: await realPathOf(hit.path),
+            realPath: await realPathOf(hit.path, { context }),
             version: probed.version,
             source: hit.source,
             shim: isStoreShim(hit.path),
@@ -616,7 +630,7 @@ export async function resolveTools({
   const timeoutMs = clamp(input.timeoutMs ?? config.timeoutMs ?? 8000, 1000, 60000);
   const concurrency = clamp(input.concurrency ?? config.concurrency ?? 6, 1, 16);
   const deep = input.deep !== false;
-  const extraDirs = collectExtraDirs(config, input);
+  const extraDirs = collectExtraDirs(config, input, env);
   if (input.refresh) clearDirectoryCache();
   const { context: scanContext } = await buildScanContext({ runProcess, signal, env, config, input });
 
@@ -626,22 +640,19 @@ export async function resolveTools({
     async (request) => {
       const spec = toolById.get(request.id);
       const names = request.names.length ? request.names : spec ? commandNamesFor(spec, process.platform) : [request.id];
-      let hit = null;
-      for (const name of names) {
-        const found = await resolveExecutableAll(name, { platform: process.platform, env, extraDirs, context: scanContext });
-        const real = found.find((item) => !isStoreShim(item.path)) ?? found[0];
-        if (real) {
-          hit = real;
-          break;
-        }
-      }
+      // 与 detect/check 共用安装目录解析；显式 names 则只解析指定命令。
+      const searchSpec = request.names.length ? { ...spec, cmd: { default: names }, patterns: {} } : spec;
+      const hits = searchSpec
+        ? await resolveToolHits({ spec: searchSpec, env, extraDirs, context: scanContext, withInstallations: !request.names.length, runProcess, signal, timeoutMs })
+        : await resolveToolHits({ query: request.id, env, extraDirs, context: scanContext });
+      const hit = orderHits(hits)[0] ?? null;
       const entry = {
         id: request.id,
         label: request.label || spec?.title || request.id,
         found: !!hit,
         path: hit?.path ?? '',
         source: hit?.source ?? '',
-        version: spec?.version ?? null,
+        version: null,
         versionRaw: '',
         expected: request.version,
         satisfied: null,
@@ -867,7 +878,8 @@ function cacheKeyOf(input = {}) {
     toolIds: Array.isArray(input.toolIds) ? [...input.toolIds].map(String).sort() : null,
     deep: !!input.deep,
     // 影响解析结果的输入都要进键，否则不同调用方会互相命中陈旧结果。
-    extraPaths: Array.isArray(input.extraPaths) ? [...input.extraPaths].map(String).sort() : null,
+    extraPaths: Array.isArray(input.extraPaths) ? [...input.extraPaths].map(String) : null,
+    allowRemoteMounts: input.allowRemoteMounts ?? null,
     timeoutMs: input.timeoutMs ?? null,
     concurrency: input.concurrency ?? null,
   });
@@ -875,9 +887,8 @@ function cacheKeyOf(input = {}) {
 
 /** 环境指纹：服务被多个插件共享时，不同 env 不能共用同一份缓存。 */
 function envFingerprint(env = process.env) {
-  return ['PATH', 'Path', 'PATHEXT', 'HOME', 'USERPROFILE', 'SystemRoot', 'windir']
-    .map((key) => `${key}=${env?.[key] ?? ''}`)
-    .join('|');
+  // 任意环境变量都可能影响采集结果或自定义安装模式；摘要避免状态输出泄露原值。
+  return createHash('sha256').update(JSON.stringify(Object.entries(env ?? {}).sort(([a], [b]) => a.localeCompare(b)))).digest('hex');
 }
 
 export function createProbeEngine(config = {}) {
@@ -895,6 +906,7 @@ export function createProbeEngine(config = {}) {
   const engine = {
     async detect(input = {}, context = {}) {
       const { runProcess, signal, log, env } = contextOf(context);
+      checkCancelled(signal);
       const key = `${cacheKeyOf(input)}#${envFingerprint(env)}`;
       const cached = cache.get(key);
       // 命中时返回副本：调用方改写结果不应污染其他调用方。

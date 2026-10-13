@@ -1,89 +1,108 @@
-// 内置进程调用回退：仅当插件以共享服务形式被其他插件调用、且调用方未提供 runProcess 时使用。
-// 错误码与宿主 runProcess 契约对齐（ENOENT / TIMEOUT / CANCELLED / OUTPUT_LIMIT / SPAWN_FAILED）。
-import { execFile } from 'node:child_process';
+// 共享服务调用方未提供宿主 runProcess 时的零依赖回退。
+// 动作仍使用宿主接口；回退保留编码、输出上限、取消和进程树回收语义。
+import { execFile, spawn } from 'node:child_process';
+import path from 'node:path';
 
-// execFile 只接受 Node 原生 BufferEncoding；其它编码（gbk 等）先收 Buffer 再用 TextDecoder 解码。
-const NATIVE_ENCODINGS = new Set([
-  'utf8',
-  'utf-8',
-  'utf16le',
-  'utf-16le',
-  'ucs2',
-  'latin1',
-  'ascii',
-  'base64',
-  'hex',
-]);
+function processError(code, message, file) {
+  return Object.assign(new Error(message), { code, details: { executable: file } });
+}
 
-function decode(value, nativeEncoding, textEncoding) {
-  if (value === null || value === undefined) return '';
-  if (nativeEncoding) return Buffer.isBuffer(value) ? value.toString(nativeEncoding) : String(value);
-  try {
-    return new TextDecoder(textEncoding).decode(value);
-  } catch {
-    return Buffer.isBuffer(value) ? value.toString('utf8') : String(value);
+/** Windows 批处理需要 cmd；引号平衡、百分号和延迟展开必须分别处理。 */
+function batchCommand(file, args, env) {
+  if ([file, ...args].some((value) => /[\r\n\0]/.test(value))) {
+    throw new TypeError('Windows 批处理的程序路径和参数不能包含换行或空字符');
   }
+  const quote = (value) => {
+    const escaped = String(value)
+      .replace(/\\+/g, (slashes, offset, source) =>
+        source[offset + slashes.length] === '"' || offset + slashes.length === source.length ? slashes.repeat(2) : slashes)
+      .replaceAll('"', '""')
+      .replaceAll('%', '%%cd:~,%');
+    return `"${escaped}"`;
+  };
+  const escapedFile = path.normalize(file).replace(/[()\][%!^"`<>&|;, *?]/g, '^$&');
+  return {
+    file: env.ComSpec || env.comspec || 'cmd.exe',
+    args: ['/d', '/e:on', '/v:off', '/s', '/c', `"${[escapedFile, ...args.map(quote)].join(' ')}"`],
+    windowsVerbatimArguments: true,
+  };
+}
+
+async function killTree(child) {
+  if (!child?.pid) return;
+  if (process.platform === 'win32') {
+    await new Promise((resolve) => {
+      execFile('taskkill.exe', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, timeout: 5000 }, () => {
+        child.kill();
+        resolve();
+      });
+    });
+    return;
+  }
+  try { process.kill(-child.pid, 'SIGKILL'); }
+  catch { child.kill('SIGKILL'); }
 }
 
 export function createFallbackRunProcess() {
-  return (file, args = [], options = {}) =>
-    new Promise((resolve, reject) => {
-      const { cwd, env, signal, timeout = 30000, maxBuffer = 4 * 1024 * 1024, encoding = 'utf8' } = options;
-      if (signal?.aborted) {
-        reject(Object.assign(new Error('操作已取消'), { code: 'CANCELLED' }));
-        return;
-      }
-      const requested = String(encoding || 'utf8');
-      const nativeEncoding = NATIVE_ENCODINGS.has(requested.toLowerCase()) ? requested : null;
-      execFile(
-        file,
-        args,
-        {
-          cwd,
-          env: env ? { ...process.env, ...env } : process.env,
-          timeout,
-          maxBuffer,
-          windowsHide: true,
-          encoding: nativeEncoding ?? 'buffer',
-          signal,
-        },
-        (error, stdout, stderr) => {
-          const out = decode(stdout, nativeEncoding, requested);
-          const err = decode(stderr, nativeEncoding, requested);
-          if (!error) {
-            resolve({ exitCode: 0, stdout: out, stderr: err });
-            return;
-          }
-          if (error.name === 'AbortError') {
-            reject(Object.assign(new Error('操作已取消'), { code: 'CANCELLED' }));
-            return;
-          }
-          if (error.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
-            reject(Object.assign(new Error('程序输出超过上限'), { code: 'OUTPUT_LIMIT' }));
-            return;
-          }
-          // timeout 触发时 execFile 会 kill 并带上 signal，与宿主语义一致。
-          if (error.killed || error.signal) {
-            reject(Object.assign(new Error('程序运行超时'), { code: 'TIMEOUT' }));
-            return;
-          }
-          if (typeof error.code === 'number') {
-            resolve({ exitCode: error.code, stdout: out, stderr: err });
-            return;
-          }
-          if (error.code === 'ENOENT') {
-            reject(
-              Object.assign(new Error(`未找到程序：${file}`), { code: 'ENOENT', details: { executable: file } }),
-            );
-            return;
-          }
-          reject(
-            Object.assign(new Error(`无法启动程序 ${file}：${error.message}`), {
-              code: error.code ?? 'SPAWN_FAILED',
-              details: { executable: file },
-            }),
-          );
-        },
-      );
+  return (file, args = [], options = {}) => new Promise((resolve, reject) => {
+    const { cwd, env, signal, timeout = 30000, maxBuffer = 4 * 1024 * 1024, encoding = 'utf8' } = options;
+    if (signal?.aborted) {
+      reject(processError('CANCELLED', '操作已取消', file));
+      return;
+    }
+    if (!Number.isFinite(maxBuffer) || maxBuffer < 0) throw new TypeError('maxBuffer 必须为非负有限数');
+    // 与新版宿主一致，编码校验在启动进程前完成。
+    const label = /^(utf16le|ucs2|ucs-2)$/i.test(encoding) ? 'utf-16le' : encoding;
+    const decoder = new TextDecoder(label);
+    const mergedEnv = env ? { ...process.env, ...env } : process.env;
+    const command = process.platform === 'win32' && /\.(cmd|bat)$/i.test(file)
+      ? batchCommand(file, args, mergedEnv) : { file, args };
+    const child = spawn(command.file, command.args, {
+      cwd, env: mergedEnv, windowsHide: true,
+      windowsVerbatimArguments: command.windowsVerbatimArguments,
+      detached: process.platform !== 'win32',
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
+    const chunks = { stdout: [], stderr: [] };
+    const lengths = { stdout: 0, stderr: 0 };
+    let stopped, killing, timer;
+    const stop = (code) => {
+      if (stopped) return;
+      stopped = code;
+      killing = killTree(child);
+    };
+    const abort = () => stop('CANCELLED');
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) abort();
+    if (timeout > 0) timer = setTimeout(() => stop('TIMEOUT'), timeout);
+    const cleanup = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', abort);
+    };
+    for (const name of ['stdout', 'stderr']) {
+      child[name].on('data', (chunk) => {
+        if (stopped) return;
+        lengths[name] += chunk.length;
+        if (lengths[name] > maxBuffer) { stop('OUTPUT_LIMIT'); return; }
+        chunks[name].push(chunk);
+      });
+    }
+    child.once('error', (error) => {
+      cleanup();
+      reject(processError(error.code ?? 'SPAWN_FAILED', `无法启动程序 ${file}：${error.message}`, file));
+    });
+    child.once('close', async (exitCode, exitSignal) => {
+      cleanup();
+      await killing;
+      if (stopped) {
+        const messages = { CANCELLED: '操作已取消', TIMEOUT: '程序运行超时', OUTPUT_LIMIT: '程序输出超过上限' };
+        reject(processError(stopped, messages[stopped], file));
+      } else if (exitSignal) {
+        reject(processError('SPAWN_FAILED', `程序被信号终止：${exitSignal}`, file));
+      } else {
+        const decode = (name) => decoder.decode(Buffer.concat(chunks[name]));
+        resolve({ exitCode, stdout: decode('stdout'), stderr: decode('stderr') });
+      }
+    });
+  });
 }
