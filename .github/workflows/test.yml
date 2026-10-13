@@ -44,7 +44,7 @@ jobs:
           exit $status
 
       - name: 从官方 npm 源安装宿主
-        run: npm install --global @yanglaofish/fishtools@0.5.0 --registry=https://registry.npmjs.org
+        run: npm install --global @yanglaofish/fishtools@0.5.2 --registry=https://registry.npmjs.org
 
       - name: 真实宿主、共享服务与独立安装验证
         working-directory: fst-env-probe

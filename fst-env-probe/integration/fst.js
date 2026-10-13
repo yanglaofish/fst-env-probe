@@ -100,6 +100,46 @@ test('共享服务自动重启及配置持久化无需全局维护', async (t) =
   assert.equal((await command(restarted, 'envprobe.service')).ttlSeconds, 0);
 });
 
+test('0.5.2 中文快捷名称保留插件目标、默认参数和重启后的绑定', async (t) => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), 'fst-envprobe-shortcuts-'));
+  let app;
+  t.after(async () => {
+    await app?.close();
+    await rm(projectDir, { recursive: true, force: true });
+  });
+  app = await createApplication({ projectDir, plugins: [] });
+  await app.linkPlugin(pluginRoot);
+  await app.configureShortcuts({
+    检查工具: { command: 'envprobe.check', input: { tool: ['node', 'npm'], candidates: false } },
+    检查Node: { action: 'fst-env-probe:check', input: { tool: 'node', candidates: false } },
+    查询路径: { command: 'envprobe.which' },
+  });
+  // 使用宿主的目标解析结果，沿 TUI 相同的动作/命令入口执行；命令绑定提供者身份。
+  const verifyShortcuts = async () => {
+    const shortcuts = app.listShortcuts();
+    assert.equal(shortcuts.length, 3);
+    assert.ok(shortcuts.every((shortcut) => shortcut.available));
+    const check = shortcuts.find((shortcut) => shortcut.name === '检查工具');
+    assert.equal(check.target.plugin, plugin.id);
+    assert.deepEqual(check.input.tool, ['node', 'npm']);
+    assert.equal((await command(app, check.target.command, check.input, { expectedPlugin: check.target.plugin })).foundCount, 2);
+    const action = shortcuts.find((shortcut) => shortcut.name === '检查Node');
+    const result = await (await app.startAction(action.target.action, action.input)).done;
+    assert.equal(result.status, 'succeeded', JSON.stringify(result.error));
+    assert.equal(result.output.foundCount, 1);
+    const which = shortcuts.find((shortcut) => shortcut.name === '查询路径');
+    assert.equal(which.target.plugin, plugin.id);
+    const resolved = await command(app, which.target.command, which.input, {
+      expectedPlugin: which.target.plugin, ui: { input: async () => 'node' },
+    });
+    assert.equal(resolved.found, true);
+  };
+  await verifyShortcuts();
+  await app.close();
+  app = await createApplication({ projectDir });
+  await verifyShortcuts();
+});
+
 test('npm 归档可独立安装并经真实 CLI 执行', async (t) => {
   const root = await workspace(t, 'package');
   const projectDir = path.join(root, 'project');
