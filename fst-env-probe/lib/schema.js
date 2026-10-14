@@ -111,7 +111,8 @@ const detectInputProperties = {
   groups: {
     type: 'array',
     title: '检测分组',
-    description: '留空表示按插件配置检测全部分组',
+    description: '留空表示检测插件配置中启用的分组',
+    'x-fst': { unsetLabel: '按插件配置启用的分组（未配置则全部）' },
     uniqueItems: true,
     items: { type: 'string', enum: GROUP_IDS },
   },
@@ -119,6 +120,7 @@ const detectInputProperties = {
     type: 'array',
     title: '只检测指定工具',
     description: '给出后只解析这些工具，并跳过系统/网络等重采集',
+    'x-fst': { unsetLabel: '不限定工具，按检测分组执行' },
     uniqueItems: true,
     items: { type: 'string' },
   },
@@ -128,13 +130,14 @@ const detectInputProperties = {
     default: false,
     description: '逐个解释器取版本、列出工具的全部命中路径、开启 ROCm 详情',
   },
-  // 这两个不设 default：否则宿主会先填默认值，使插件配置里的设置永远失效。
+  // 通过新版宿主的配置继承协议展示实际值，旧宿主仍由执行逻辑兜底。
   timeoutMs: {
     type: 'integer',
     title: '单项超时（毫秒）',
     minimum: 1000,
     maximum: 60000,
     description: '留空则使用插件配置的 timeoutMs',
+    'x-fst': { fromConfig: 'timeoutMs', unit: '毫秒' },
   },
   concurrency: {
     type: 'integer',
@@ -142,8 +145,9 @@ const detectInputProperties = {
     minimum: 1,
     maximum: 16,
     description: '留空则使用插件配置的 concurrency',
+    'x-fst': { fromConfig: 'concurrency' },
   },
-  extraPaths: { type: 'array', title: '额外搜索目录', items: { type: 'string' } },
+  extraPaths: { type: 'array', title: '额外搜索目录', items: { type: 'string' }, description: '本次目录追加到插件配置目录之后，不替换配置目录', 'x-fst': { unsetLabel: '仅使用插件配置目录（未配置则无额外目录）' } },
   refresh: { type: 'boolean', title: '忽略目录缓存', default: false },
   snapshot: {
     type: 'boolean',
@@ -152,7 +156,7 @@ const detectInputProperties = {
     description:
       '写入插件的跨运行状态目录（宿主的 stateDir，通常是 <项目>/.flow/plugin-state/<插件ID摘要>/environment-latest.json）；实际路径见返回值 snapshotPath',
   },
-  snapshotPath: { type: 'string', title: '快照文件路径', description: '留空则使用插件配置或默认位置' },
+  snapshotPath: { type: 'string', title: '快照文件路径', description: '非空白的显式路径或配置路径会启用快照写入；空白路径按未指定处理，无路径时由“写入快照文件”控制', 'x-fst': { fromConfig: 'snapshotPath', unsetLabel: '开启快照后写入插件状态目录中的 environment-latest.json' } },
 };
 
 export const detectInput = {
@@ -324,6 +328,7 @@ const runtimeInputProperties = {
     minimum: 1000,
     maximum: 60000,
     description: '留空则使用插件配置的 timeoutMs',
+    'x-fst': { fromConfig: 'timeoutMs', unit: '毫秒' },
   },
   concurrency: {
     type: 'integer',
@@ -331,8 +336,9 @@ const runtimeInputProperties = {
     minimum: 1,
     maximum: 16,
     description: '留空则使用插件配置的 concurrency',
+    'x-fst': { fromConfig: 'concurrency' },
   },
-  extraPaths: { type: 'array', title: '额外搜索目录', items: { type: 'string' } },
+  extraPaths: { type: 'array', title: '额外搜索目录', items: { type: 'string' }, description: '本次目录追加到插件配置目录之后，不替换配置目录', 'x-fst': { unsetLabel: '仅使用插件配置目录（未配置则无额外目录）' } },
   refresh: { type: 'boolean', title: '忽略目录缓存', default: false },
 };
 
@@ -512,15 +518,15 @@ export const checkInput = {
   properties: {
     tool: {
       title: '要检查的工具',
+      'x-fst': { unsetLabel: '按分组检查已登记工具' },
       description: '注册表标识（docker、kubectl、python…）或任意命令名（含未内置的内网工具）；可给一个或多个。留空则按 group 列出',
-      oneOf: [
-        { type: 'string', title: '单个工具' },
-        { type: 'array', title: '多个工具', items: { type: 'string' } },
-      ],
+      type: ['string', 'array'],
+      items: { type: 'string' },
     },
     group: {
       type: 'string',
       title: '按分组列出',
+      'x-fst': { unsetLabel: '全部分组' },
       enum: [...GROUP_IDS, 'all'],
       description: '列出该分组下全部检测项；all 表示全部',
     },
@@ -537,6 +543,7 @@ export const checkInput = {
       minimum: 1000,
       maximum: 60000,
       description: '留空则使用插件配置的 timeoutMs',
+      'x-fst': { fromConfig: 'timeoutMs', unit: '毫秒' },
     },
     concurrency: {
       type: 'integer',
@@ -544,10 +551,11 @@ export const checkInput = {
       minimum: 1,
       maximum: 16,
       description: '留空则使用插件配置的 concurrency',
+      'x-fst': { fromConfig: 'concurrency' },
     },
     refresh: { type: 'boolean', title: '忽略目录缓存', default: false },
-    extraPaths: { type: 'array', title: '额外搜索目录', items: { type: 'string' } },
-    allowRemoteMounts: { type: 'boolean', title: '允许扫描远程挂载点', description: '留空则使用插件配置，默认跳过远程目录' },
+    extraPaths: { type: 'array', title: '额外搜索目录', items: { type: 'string' }, description: '本次目录追加到插件配置目录之后，不替换配置目录', 'x-fst': { unsetLabel: '仅使用插件配置目录（未配置则无额外目录）' } },
+    allowRemoteMounts: { type: 'boolean', title: '允许扫描远程挂载点', description: '留空则使用插件配置，默认跳过远程目录', 'x-fst': { fromConfig: 'allowRemoteMounts' } },
   },
 };
 
@@ -629,14 +637,15 @@ export const pythonsInput = {
     },
     includeConda: { type: 'boolean', title: '包含 conda 环境', default: true },
     refresh: { type: 'boolean', title: '忽略目录缓存', default: false },
-    extraPaths: { type: 'array', title: '额外搜索目录', items: { type: 'string' } },
-    allowRemoteMounts: { type: 'boolean', title: '允许扫描远程挂载点', description: '留空则使用插件配置，默认跳过远程目录' },
+    extraPaths: { type: 'array', title: '额外搜索目录', items: { type: 'string' }, description: '本次目录追加到插件配置目录之后，不替换配置目录', 'x-fst': { unsetLabel: '仅使用插件配置目录（未配置则无额外目录）' } },
+    allowRemoteMounts: { type: 'boolean', title: '允许扫描远程挂载点', description: '留空则使用插件配置，默认跳过远程目录', 'x-fst': { fromConfig: 'allowRemoteMounts' } },
     timeoutMs: {
       type: 'integer',
       title: '单项超时（毫秒）',
       minimum: 1000,
       maximum: 60000,
       description: '留空则使用插件配置的 timeoutMs',
+      'x-fst': { fromConfig: 'timeoutMs', unit: '毫秒' },
     },
   },
 };

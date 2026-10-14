@@ -62,7 +62,31 @@ fst command envprobe.verify  --input req.json    # 校验环境要求
 fst command envprobe.catalog                     # 列出可检测项
 ```
 
-TUI 里也可以：`/fst-env-probe` 进入插件二级菜单，或直接输入 `/envprobe.detect`、`/envprobe.which`。
+TUI 里也可以：fst 0.6.0 输入 `/envprobe` 进入插件菜单，或直接输入 `/envprobe.detect`、`/envprobe.which`。
+
+### fst 0.6.0 的有效参数
+
+插件 0.1.2 声明了参数来源：超时初始继承 8000 毫秒、并发初始继承 6、远程扫描初始继承“否”。修改插件配置后，下一次预览和执行同步使用新值；设置本次输入会覆盖继承，也可以在界面恢复继承。
+
+工具留空表示按分组检查已登记工具，分组留空表示全部分组。额外搜索目录是追加关系：本次目录与插件配置目录合并，不能用固定默认值替代。`resolve` 的工具要求和 `verify` 的环境要求仍需显式填写。
+
+完整来源展示需要 fst 0.6.0。新版 `plugin lint` 会对 `lib/run-process.js` 的两处独立回退报 `UNMANAGED_PROCESS` 警告：普通宿主动作使用受管 `runProcess`，共享服务调用者应传入动作上下文；没有上下文的独立调用使用回退，不具备宿主的执行日志及代理管理。本轮保留该既有调用方式，没有隐藏诊断。
+
+### Windows x64 离线使用
+
+通过宿主的便携打包功能导出的 ZIP 已包含 FST、Node/npm 与本插件，不需要在目标机器联网安装依赖。完整解压后运行根目录的 `run.cmd`，输入 `/envprobe` 进入菜单，或输入 `/envprobe.check` 直接执行默认检查。
+
+也可以在 PowerShell 中生成报告：
+
+```powershell
+.\fst.cmd command envprobe.report
+# 如包中附带 envprobe-report 工作流，也可以执行：
+.\fst.cmd run envprobe-report
+```
+
+默认可写工作区位于用户的 `~/.fishtools/workspaces/<包ID>`，报告位于其中的 `results/<运行ID>/`。命令返回 JSON 中的 `files` 给出实际文件路径。也可用 `--workspace D:\fst-work` 指定可写目录。必须解压整个包并保留目录结构，不能单独复制 cmd 文件。
+
+包只携带检测工具和自身运行时，不携带被检测的 Python、Docker、GPU 驱动等软件；没有找到软件会如实报告。Windows 包不能直接用于 Linux/macOS，须按平台另行导出。
 
 ### fst 0.5.2 的中文快捷名称
 
@@ -71,7 +95,7 @@ TUI 里也可以：`/fst-env-probe` 进入插件二级菜单，或直接输入 `
 也可选择稳定动作 ID，例如 `fst-env-probe:check`；命令快捷项由宿主同时保存目标命令和插件身份。
 快捷名称保存在当前工作区，重启后继续有效；原有动作 ID、`envprobe.*` 命令和输出字段继续使用。
 
-本插件 `0.1.1` 可直接运行于 fst `0.5.2`。本轮调整了集成测试、CI 宿主基线及说明，生产代码无需迁移。
+中文快捷名称自 fst 0.5.2 起可用；0.1.2 的参数来源展示及本轮集成验证以 fst 0.6.0 为准。
 
 ## 斜杠入口（TUI 里直接敲）
 
@@ -309,7 +333,7 @@ python、pip、node、java、go、rustc、cargo、ruby、dotnet、php 声明；�
 ```sh
 cd fst-env-probe                              # 从仓库根目录进入插件包
 npm test                                     # 单元及回归测试
-npm run test:integration                     # 需已安装 fst 0.5.2 或更新版本
+npm run test:integration                     # 需已安装 fst 0.6.0 或更新版本
 fst plugin validate .                        # 检查声明（不执行动作）
 fst plugin lint .                            # 质量检查
 npm pack --dry-run                            # 确认打包内容
