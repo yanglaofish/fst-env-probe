@@ -33,14 +33,23 @@ async function command(app, name, input = {}, context = {}) {
   return result.output;
 }
 
-test('真实 fst 校验及质量检查无诊断', async () => {
+test('真实 fst 声明有效，质量诊断仅限已审查的独立回退进程', async () => {
   console.log(`兼容验证宿主：${hostInfo.name}@${hostInfo.version}，${process.platform}/${process.arch}`);
   for (const name of ['validate', 'lint']) {
     const result = await runProcess(process.execPath, [fstBin, 'plugin', name, pluginRoot, '--json']);
     assert.equal(result.exitCode, 0, result.stderr);
     const output = JSON.parse(result.stdout);
     assert.equal(output.valid, true);
-    assert.deepEqual(output.diagnostics, []);
+    if (name === 'validate') assert.deepEqual(output.diagnostics, []);
+    else {
+      // 共享服务无宿主上下文时保留独立回退；严禁放过其他文件或其他类别的新警告。
+      assert.equal(output.diagnostics.length, 2);
+      for (const diagnostic of output.diagnostics) {
+        assert.equal(diagnostic.severity, 'warning');
+        assert.equal(diagnostic.code, 'UNMANAGED_PROCESS');
+        assert.match(diagnostic.path.replaceAll('\\', '/'), /^lib\/run-process\.js:\d+:\d+$/);
+      }
+    }
   }
 });
 
@@ -100,6 +109,72 @@ test('共享服务自动重启及配置持久化无需全局维护', async (t) =
   assert.equal((await command(restarted, 'envprobe.service')).ttlSeconds, 0);
 });
 
+test('0.6.0 参数预览与执行一致，配置更新及恢复继承不固化旧值', async (t) => {
+  const projectDir = await workspace(t, 'effective-input');
+  let received;
+  const observedPlugin = { ...plugin, actions: { ...plugin.actions, check: {
+    ...plugin.actions.check,
+    async run(input, context) {
+      received = structuredClone(input);
+      return plugin.actions.check.run(input, context);
+    },
+  } } };
+  const app = await createApplication({ projectDir, plugins: [{ plugin: observedPlugin, root: pluginRoot }] });
+  t.after(() => app.close());
+  const initial = app.previewInput('/envprobe.check', {});
+  assert.equal(initial.value.timeoutMs, 8000);
+  assert.equal(initial.value.concurrency, 6);
+  assert.equal(initial.value.allowRemoteMounts, false);
+  assert.equal(initial.fields.timeoutMs.source, 'config');
+  assert.equal(initial.fields.timeoutMs.unit, '毫秒');
+  assert.equal(initial.fields.tool.unsetLabel, '按分组检查已登记工具');
+  assert.equal(initial.fields.group.unsetLabel, '全部分组');
+  assert.equal(Object.hasOwn(initial.value, 'tool'), false);
+  // 使用真实 TUI 参数渲染与直接执行入口；界面适配器仅模拟用户选择“执行”。
+  const cliRoot = path.dirname(requireHost.resolve('@mytools/fst-cli/package.json'));
+  const { inputEntries, commandInput } = await import(pathToFileURL(path.join(cliRoot, 'src/terminal/schema.js')));
+  const displayed = inputEntries(plugin.actions.check.input, initial.value, initial.fields).join('\n');
+  assert.match(displayed, /继承插件配置：8000 毫秒/);
+  assert.match(displayed, /要检查的工具：按分组检查已登记工具/);
+  assert.doesNotMatch(displayed, /插件未声明缺省行为/);
+  const direct = await commandInput({ select: async () => 'run' }, plugin.actions.check.input, {}, {
+    preview: (input) => app.previewInput('/envprobe.check', input),
+  });
+  assert.deepEqual(direct.value, {}, '直接执行不应固化继承值');
+  for (const action of ['detect', 'report', 'resolve', 'verify', 'pythons']) {
+    const preview = app.previewInput(`fst-env-probe:${action}`, {});
+    assert.equal(preview.value.timeoutMs, 8000, action);
+    assert.equal(preview.fields.timeoutMs.source, 'config', action);
+  }
+  await app.configurePlugin(plugin.id, { timeoutMs: 4300, concurrency: 2, allowRemoteMounts: true });
+  const raw = { tool: 'node', candidates: false, allowRemoteMounts: false };
+  const preview = app.previewInput('/envprobe.check', raw);
+  assert.equal(preview.value.timeoutMs, 4300);
+  assert.equal(preview.value.concurrency, 2);
+  assert.equal(preview.value.allowRemoteMounts, false);
+  assert.equal(preview.fields.allowRemoteMounts.source, 'input');
+  assert.equal((await command(app, 'envprobe.check', raw)).foundCount, 1);
+  assert.deepEqual(received, preview.value);
+  assert.deepEqual(raw, { tool: 'node', candidates: false, allowRemoteMounts: false });
+  const explicit = { ...raw, timeoutMs: 1700 };
+  assert.equal(app.previewInput('/envprobe.check', explicit).value.timeoutMs, 1700);
+  assert.equal((await command(app, 'envprobe.check', explicit)).foundCount, 1);
+  assert.equal(received.timeoutMs, 1700);
+  delete explicit.timeoutMs;
+  await app.configurePlugin(plugin.id, { timeoutMs: 5200 });
+  assert.equal(app.previewInput('/envprobe.check', explicit).value.timeoutMs, 5200);
+  await command(app, 'envprobe.check', explicit);
+  assert.equal(received.timeoutMs, 5200);
+  const snapshotPath = path.join(projectDir, 'configured-snapshot.json');
+  await app.configurePlugin(plugin.id, { snapshotPath });
+  const snapshotInput = { toolIds: ['node'], snapshot: false };
+  assert.equal(app.previewInput('/envprobe.detect', snapshotInput).value.snapshotPath, snapshotPath);
+  const detected = await command(app, 'envprobe.detect', snapshotInput);
+  // 既有语义：非空配置路径本身就启用快照，不能提示为必须同时打开 snapshot。
+  assert.equal(detected.snapshotPath, snapshotPath);
+  assert.equal(JSON.parse(await readFile(snapshotPath, 'utf8')).paths.node, detected.paths.node);
+});
+
 test('0.5.2 中文快捷名称保留插件目标、默认参数和重启后的绑定', async (t) => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), 'fst-envprobe-shortcuts-'));
   let app;
@@ -142,6 +217,8 @@ test('0.5.2 中文快捷名称保留插件目标、默认参数和重启后的�
 
 test('npm 归档可独立安装并经真实 CLI 执行', async (t) => {
   const root = await workspace(t, 'package');
+  // 0.5.3 起 CLI 默认安装到全局库；测试必须显式隔离，避免改动用户安装。
+  const isolatedEnv = { FISHTOOLS_HOME: path.join(root, 'home'), npm_config_registry: 'https://registry.npmjs.org' };
   const projectDir = path.join(root, 'project');
   await mkdir(projectDir);
   await writeFile(path.join(projectDir, 'flow.project.json'), JSON.stringify({ plugins: [], config: {} }));
@@ -149,15 +226,15 @@ test('npm 归档可独立安装并经真实 CLI 执行', async (t) => {
   assert.equal(packed.exitCode, 0, packed.stderr);
   const archive = path.join(root, JSON.parse(packed.stdout)[0].filename);
   const installed = await runProcess(process.execPath, [fstBin, '--project', projectDir, 'plugin', 'add', archive], {
-    timeout: 120000, env: { npm_config_registry: 'https://registry.npmjs.org' },
+    timeout: 120000, env: isolatedEnv,
   });
   assert.equal(installed.exitCode, 0, installed.stderr);
-  const result = await runProcess(process.execPath, [fstBin, '--project', projectDir, 'command', 'envprobe.service']);
+  const result = await runProcess(process.execPath, [fstBin, '--project', projectDir, 'command', 'envprobe.service'], { env: isolatedEnv });
   assert.equal(result.exitCode, 0, result.stderr);
   assert.equal(JSON.parse(result.stdout).ready, true);
   const input = path.join(root, 'input.json');
   await writeFile(input, JSON.stringify({ tool: ['node', 'npm'], candidates: false }));
-  const checked = await runProcess(process.execPath, [fstBin, '--project', projectDir, 'command', 'envprobe.check', '--input', input]);
+  const checked = await runProcess(process.execPath, [fstBin, '--project', projectDir, 'command', 'envprobe.check', '--input', input], { env: isolatedEnv });
   assert.equal(checked.exitCode, 0, checked.stderr);
   assert.equal(JSON.parse(checked.stdout).foundCount, 2);
 });

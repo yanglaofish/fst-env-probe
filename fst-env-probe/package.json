@@ -1,6 +1,6 @@
 {
   "name": "fst-env-probe",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "main": "index.js",
   "description": "跨平台环境探测插件：采集操作系统与内核、Shell、语言运行时、包管理器、容器与 K8s、网卡与 IP、GPU 等环境信息，输出结构化路径供其他插件、工作流与斜杠命令使用；同时把探测能力发布为 Cordis 共享服务 env.probe。",

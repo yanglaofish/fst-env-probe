@@ -55,8 +55,9 @@ npm test                   # 单元与回归测试，按平台跳过不适用项
 npm run test:integration   # 使用已安装的真实 fst 验证动作、工作流、服务和独立归档安装
 ```
 
-CI 配置了 **Ubuntu / Windows / macOS** 三平台矩阵，分别验证 `fst 0.5.2` 与官方 npm `latest`
-（[.github/workflows/test.yml](.github/workflows/test.yml)）。集成测试要求宿主至少为 `0.5.2`，包含中文快捷名称、默认参数和重启持久化。
+CI 配置了 **Ubuntu / Windows / macOS** 三平台矩阵，分别验证 `fst 0.6.0` 与官方 npm `latest`
+（[.github/workflows/test.yml](.github/workflows/test.yml)）。集成测试要求宿主至少为 `0.6.0`，包含有效参数来源、TUI 参数展示、中文快捷名称和重启持久化。
+最新适配与离线交付说明见 [0.6.0 兼容评审与离线包](docs/fst-0.6.0兼容评审与离线包.md)。
 版本升级的验证范围与遗留限制见 [0.5.2 兼容评审](docs/fst-0.5.2兼容评审.md)；此前的修复记录见
 [0.5.0/0.5.1 升级评审](docs/升级评审报告-2026-10-13.md)。
 
